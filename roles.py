@@ -1,14 +1,38 @@
 
-known_roles = ["Nuker",
-               "Pusher",
-               "Lane Support",
-               "Support",
-               "Disabler",
+known_roles = ["Carry",
                "Initiator",
-               "Carry",
+               "Disabler",
+               "Nuker",
+               "Pusher",
                "Jungler",
                "Durable",
-               "Escape",]
+               "Escape",
+               "Support",
+               "Lane Support",
+]
+
+roles_micro = ["c",
+               "i",
+               "d",
+               "n",
+               "p",
+               "j",
+               "D",
+               "e",
+               "s",
+               "l"]
+
+def grid_roles(hero):
+    if hero not in roles:
+        return "??????????"
+    role_string = ""
+    for i, k in enumerate(known_roles):
+        if k in roles[hero]:
+            role_string += roles_micro[i]
+        else:
+            role_string += " "
+    return role_string
+
 
 hard_carries = [
     "Anti-Mage",

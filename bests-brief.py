@@ -1,3 +1,4 @@
+
 from copy import deepcopy
 from heroes import heroes
 from alpha import alpha
@@ -19,14 +20,15 @@ from matchup_76c_slark import matchup
 import argparse
 import pprint
 import string
+import sys
 import math
 
 pp = pprint.PrettyPrinter(indent = 4)
 
 parser = argparse.ArgumentParser(description='lane advisor for dota2')
-parser.add_argument('heroes', metavar='heroes', type=str, nargs='+', help='your team')
-parser.add_argument('-e', '--enemy', metavar='enemy', type=str, nargs='+', help='the other team', default='')
-parser.add_argument('-c', '--consider', type=str, help='which list of heroes to consider (default = all heroes)', default='alpha')
+parser.add_argument('-p', '--position', type=int,  help='filter by position', default='-1')
+parser.add_argument('-l', '--lane', type=str, help='filter lane', default='')
+parser.add_argument('-o', '--heroes', metavar=heroes, nargs='+', type=str, help='filter hero(es)', default='')
 args = parser.parse_args()
 
 
@@ -77,14 +79,9 @@ def show_heroes(parsed_heroes, scores={}, enemy=False):
             print str("enemy").rjust(9),
             print str(u).ljust(20), 
         else:
-            if u in scores:
-                print str(scores[u]).rjust(9),
-            else:
-                print str("").rjust(9),
             print str(u).ljust(20), 
-        print str(grid_lanes(u)).ljust(12*3+1),            
-        print str(grid_positions(u)).ljust(6),            
-        print str(grid_roles(u)).ljust(11)
+        print
+
 
 
 def print_heroes(ah, scores={}, enemy=False):
@@ -110,36 +107,6 @@ def get_values(ah):
 
     return usa
 
-
-consider_these_heroes = alpha
-
-if args.consider == "alpha":
-    consider_these_heroes = alpha
-else:
-    print "unknown args.consider", args.consider
-    exit()
-
-ra = get_values(args.heroes)
-print args.consider, len(consider_these_heroes)
-
-if args.enemy != "":
-    print
-    print_heroes(args.enemy, enemy=True)
-    print 
-else:
-    print
-
-print_heroes(args.heroes)
-
-scores = {}
-
-for hh in consider_these_heroes:
-    if hh in parse_heroes(args.heroes):
-        continue
-    if hh in parse_heroes(args.enemy):
-        continue
-
-    foo = get_values(args.heroes + [hh])
 
 
 def analyze_team_positions(hh):
@@ -395,95 +362,99 @@ def valid_lanes(tl, team):
     return True
 
 
-print 
 
 
-if len(args.heroes) < 5:
-
-    possible_heroes = []
-    lane_conflicts = []
-    role_conflicts = []
-    nc_data = []
-
-    for hh in consider_these_heroes:
-        if hh in parse_heroes(args.heroes):
-            continue
-        if hh in parse_heroes(args.enemy):
-            continue
-    
-
-        n=build_roles(args.heroes+[hh])
-
-        if not len(n)>0:
-            role_conflicts += [hh]
-            continue
-
-        n=build_lanes(args.heroes+[hh])
-
-        if len(n)>0:
-            possible_heroes += [hh]
-        else:
-            lane_conflicts += [hh]
-            continue
-
-        if args.enemy:
-            nc_data += [[nc_mod(hh, args.enemy), hh]]
-        else:
-            nc_data += [[pb_mod(hh), hh]]
-
-    # now we have our list of possible heroes
-    # all of whom could work based on lane or role
-    # we need to sort it by counters
-
-    print "perhaps"
-
-    sorted_nc_data = sorted(nc_data, key=lambda l: l[0], reverse=True)
-    
-    sorted_hero_names = []
-    scores_dictionary = {}
-
-    for row in sorted_nc_data:
-        sorted_hero_names += [row[1]]
-        scores_dictionary[row[1]] = row[0]
-
-    show_heroes(sorted_hero_names, scores=scores_dictionary)
+# for each lane
+# show the bests, by role, 1-5
 
 
+# lanes
+# mid = solo mid
+# ssafe = solo safe
+# dsafe = dual safe
+# shard = solo hard
+# dhard = dual hard
+# jungle = jungle
+# ssafej = solo safe w/ jungler
+# dsafej = dual safe w/ jungler
+
+lane_args = {
+    'mid' : 0,
+    'shard' : 2,
+    'dhard' : 3,
+    'ssafe' : 5,
+    'ssafej' : 6,
+    'dsafe' : 7,
+    'dsafej' : 8,
+    'jungle' : 11,
+}
+
+
+
+
+filter_by_this_lane = -1
+if args.lane != '':
+    if args.lane in lane_args:
+        filter_by_this_lane = lane_args[args.lane]
+    else:
+        print >> sys.stderr, "Unknown lane arg: ", args.lane
+        print >> sys.stderr, "Use: mid, shard, dhard, ssafe, ssafej, dsafe, dsafej, or jungle"
+        exit()
+
+filter_by_this_position = -1
+if args.position == -1:
+    filter_by_this_position = - 1
+elif args.position < 1 or args.position > 5:
+    print >> sys.stderr, "Unknown position arg: ", args.position
+    print >> sys.stderr, "Use: 1, 2, 3, 4, or 5"
+    exit()
 else:
-    print "analyzing your team"
+    filter_by_this_position = args.position - 1
 
-    print "our roles:"
-    v = build_roles(args.heroes, verbose=True)
-
-    sorted_v = sorted(v, key=lambda l: l[0], reverse=True)
-
-    # just show the top 3
-    if len(sorted_v) > 0:
-        for i, j in enumerate(sorted_v):
-            pretty_roles(j[1])
-            if i == 2:
-                break
-    else:
-        print "No possible roles"
+filter_by_heroes = ""
+if args.heroes != "":
+    hset = parse_heroes(args.heroes)
+    filter_by_heroes = hset
 
 
-    print "our lanes:"
-    n = build_lanes(args.heroes, verbose=True)
+hero_stack = []
+hero_scores = {}
 
-    sorted_n = sorted(n, key=lambda l: l[0], reverse=True)
-
-    if len(sorted_n) > 0:
-        for i, j in enumerate(sorted_n):
-            pretty_lanes(j[1])
-            if i == 6:
-                break
-    else:
-        print "No possible lanes"
-
-
-
-
-
+for hh in alpha:
+    if filter_by_heroes != "":
+        if hh not in filter_by_heroes:
+            continue
+    if hh not in laning:
+        continue
+    if hh not in positions:
+        continue
+    if filter_by_this_lane > -1:
+        if laning[hh][filter_by_this_lane] == 0:
+            continue
+    if filter_by_this_position >- 1:
+        if positions[hh][filter_by_this_position] == 0:
+            continue
+    hero_stack += [hh]
+    if filter_by_this_lane != -1 and filter_by_this_position == -1:
+        hero_scores[hh] = laning[hh][filter_by_this_lane] 
+    if filter_by_this_lane == -1 and filter_by_this_position != -1:
+        hero_scores[hh] = positions[hh][filter_by_this_position]
+    if filter_by_this_lane == -1 and filter_by_this_position == -1:
+        hero_scores[hh] = pickbans[hh] 
+    if filter_by_this_lane != -1 and filter_by_this_position != -1:
+        hero_scores[hh] = positions[hh][filter_by_this_position] * laning[hh][filter_by_this_lane] 
     
 
+sorted_hero_stack = sorted(hero_stack, key=lambda h: hero_scores[h], reverse=True)
+
+if filter_by_this_lane > -1:
+    print "Filtering by lane:     ", lanes_laning[filter_by_this_lane]
+
+if filter_by_this_position >- 1:
+    print "Filtering by position: ", filter_by_this_position+1
+
+print
+
+show_heroes(sorted_hero_stack, hero_scores)
+        
 

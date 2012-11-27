@@ -91,6 +91,7 @@ aliases = {
 #    "" : "Undying",
 #    "" : "Ursa",
     "vs" : "Vengeful Spirit",
+    "venge" : "Vengeful Spirit",
     "veno" : "Venomancer",
 #    "" : "Viper",
     "vis" : "Visage",

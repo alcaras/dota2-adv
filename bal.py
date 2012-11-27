@@ -23,7 +23,7 @@ import math
 
 pp = pprint.PrettyPrinter(indent = 4)
 
-parser = argparse.ArgumentParser(description='lane advisor for dota2')
+parser = argparse.ArgumentParser(description='balanced lane advisor for dota2')
 parser.add_argument('heroes', metavar='heroes', type=str, nargs='+', help='your team')
 parser.add_argument('-e', '--enemy', metavar='enemy', type=str, nargs='+', help='the other team', default='')
 parser.add_argument('-c', '--consider', type=str, help='which list of heroes to consider (default = all heroes)', default='alpha')
@@ -78,13 +78,68 @@ def show_heroes(parsed_heroes, scores={}, enemy=False):
             print str(u).ljust(20), 
         else:
             if u in scores:
-                print str(scores[u]).rjust(9),
+                print str(round(scores[u],3)).rjust(9),
             else:
                 print str("").rjust(9),
             print str(u).ljust(20), 
         print str(grid_lanes(u)).ljust(12*3+1),            
         print str(grid_positions(u)).ljust(6),            
-        print str(grid_roles(u)).ljust(11)
+        print str(grid_roles(u)).ljust(11),
+        print str(round(weighted_position(u), 2)).rjust(5)
+
+def can_consider_position(p, team):
+    # basically checking if there is any hero that is exclusive to that 
+    # position
+    # or if there are two heroes of whom one must be that position
+    # so we're looking at valid position configs and seeing if we can find one
+    # that doesn't include that position
+    role_set = build_roles(team)
+    for role_config in role_set:
+        if role_config[1][p-1] == []: # the role is open
+            return True
+    return False
+
+
+
+def show_heroes_by_position(parsed_heroes, scores={}, enemy=False, team=[], limit=5):
+    for p in [0, 1, 2, 3, 4, 5]:
+        if p > 0:
+            # should we consider this position at all, given our heroes?
+            if not can_consider_position(p, team):
+                continue
+            print "Position", p
+        else:
+            print "Unknown position"
+        i = 0
+        for u in (parsed_heroes):
+            if i >= limit:
+                continue
+            if p == 0:
+                if u in positions:
+                    continue
+            else:
+                if u not in positions:
+                    continue
+                if positions[u][p-1] == 0:
+                    continue
+                if recommended_position(u) != str(p):
+                    continue
+            if enemy:
+                print str("enemy").rjust(9),
+                print str(u).ljust(20), 
+            else:
+                if u in scores:
+                    print str(round(scores[u],3)).rjust(9),
+                else:
+                    print str("").rjust(9),
+                print str(u).ljust(20), 
+            print str(grid_lanes(u)).ljust(12*3+1),            
+            print str(grid_positions(u)).ljust(6),            
+            print str(grid_roles(u)).ljust(11),
+            print str(round(weighted_position(u), 2)).rjust(5)
+            i += 1
+        print
+            
 
 
 def print_heroes(ah, scores={}, enemy=False):
@@ -193,11 +248,35 @@ def pretty_lanes(tl):
             print str(lanes_laning[k]).rjust(20), v
     print
 
+
+
 def pretty_roles(tl):
+    lane_role_jung = { 1 : "Safe Lane",
+                  2 : "Solo Mid",
+                  3 : "Solo Hard Lane",
+                  4 : "Jungle",
+                  5 : "Safe Lane (Babysit)",
+                  }
+    lane_role_normal = { 1 : "Safe Lane",
+                  2 : "Solo Mid",
+                  3 : "Hard Lane",
+                  4 : "Hard Lane",
+                  5 : "Safe Lane (Babysit)",
+                  }
+
+    lane_role =  lane_role_normal
+    
+    # if our #3 can solo hard lane
+    # and our #4 can jungle
+    if tl[2][0] in laning and tl[3][0] in laning:
+        if laning[tl[2][0]][2] > 0 and laning[tl[3][0]][11] > 0:
+            lane_role = lane_role_jung
+
     print str(score_role_config(tl)).ljust(10)
     for k, v in tl.iteritems():
         if len(v) > 0:
-            print k+1, v, " "
+            print str(k+1).rjust(2), str(v).ljust(20),
+            print lane_role[k+1]
     print
 
 # build roles based on a team
@@ -235,6 +314,7 @@ disabled_lane_types = []
 disabled_lane_types = [1, 4, 9, 10]
 
 
+
 # given a config, give it a score
 def score_lane_config(tl):
     score = 0
@@ -256,18 +336,22 @@ def score_role_config(tl):
 
 
 def have_no_laning_data(laning_hero):
+    if laning_hero not in laning:
+        return True
     zeroes = 0
     for i in range(0, 12):
-        if laning_hero[i] == 0:
+        if laning[laning_hero][i] == 0:
             zeroes += 1
     if zeroes == 12:
         return True
     return False
 
 def have_no_role_data(laning_hero):
+    if laning_hero not in positions:
+        return True
     zeroes = 0
     for i in range(0, 5):
-        if laning_hero[i] == 0:
+        if positions[laning_hero][i] == 0:
             zeroes += 1
     if zeroes == 5:
         return True
@@ -277,15 +361,23 @@ def recu_roles(i, team, tl, roles_list, verbose=False):
     if i >= len(team):
         return [[score_role_config(tl), tl]]
     append_to_roles_list = []
-    if team[i] in laning:
+    if team[i] in positions:
         for j, k in enumerate(positions[team[i]]):
-            if k > 0 or have_no_role_data(positions[team[i]]):
+            if k > 0 or have_no_role_data(team[i]):
                 if tl[j] == []:
                     new_tl = deepcopy(tl)
                     new_tl[j] += [team[i]]
                     latest = recu_roles(i+1, team, new_tl, roles_list, verbose)
                     if latest:
                         append_to_roles_list = append_to_roles_list + latest
+    else:
+        for j, k in enumerate([0, 0, 0, 0, 0]):
+            if tl[j] == []:
+                new_tl = deepcopy(tl)
+                new_tl[j] += [team[i]]
+                latest = recu_roles(i+1, team, new_tl, roles_list, verbose)
+                if latest:
+                    append_to_roles_list = append_to_roles_list + latest
 
     return append_to_roles_list
 
@@ -297,15 +389,30 @@ def recu_lanes(i, team, tl, laning_list, verbose=False):
         return None
     append_to_laning_list = []
     if team[i] in laning:
-        for j, k in enumerate(laning[team[i]]):
+        for j, k in enumerate(expanded_laning(team[i])):
             if j in disabled_lane_types:
                 continue
-            if k > 0: # or have_no_laning_data(laning[team[i]]):
+            if have_no_laning_data(team[i]):
+                if j == 11: # don't put heroes we don't have laning data for
+                            # in the jungle
+                    continue
+            if k > 0 or have_no_laning_data(team[i]):
                 new_tl = deepcopy(tl)
                 new_tl[j] += [team[i]]
                 latest = recu_lanes(i+1, team, new_tl, laning_list, verbose)
                 if latest:
                     append_to_laning_list = append_to_laning_list + latest
+    else:
+        for j, k in enumerate([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]):
+            if j in disabled_lane_types:
+                continue
+            if j == 11: # not junglers
+                continue
+            new_tl = deepcopy(tl)
+            new_tl[j] += [team[i]]
+            latest = recu_lanes(i+1, team, new_tl, laning_list, verbose)
+            if latest:
+                append_to_laning_list = append_to_laning_list + latest                               
 
     return append_to_laning_list
 
@@ -405,25 +512,22 @@ if len(args.heroes) < 5:
     role_conflicts = []
     nc_data = []
 
+    us = parse_heroes(args.heroes)
+    our_pos = 0
+    for h in us:
+        our_pos += weighted_position(h)
+    print 15-our_pos
+
     for hh in consider_these_heroes:
         if hh in parse_heroes(args.heroes):
             continue
         if hh in parse_heroes(args.enemy):
             continue
-    
-
+   
         n=build_roles(args.heroes+[hh])
 
         if not len(n)>0:
             role_conflicts += [hh]
-            continue
-
-        n=build_lanes(args.heroes+[hh])
-
-        if len(n)>0:
-            possible_heroes += [hh]
-        else:
-            lane_conflicts += [hh]
             continue
 
         if args.enemy:
@@ -446,7 +550,7 @@ if len(args.heroes) < 5:
         sorted_hero_names += [row[1]]
         scores_dictionary[row[1]] = row[0]
 
-    show_heroes(sorted_hero_names, scores=scores_dictionary)
+    show_heroes_by_position(sorted_hero_names, scores=scores_dictionary, team=args.heroes)
 
 
 else:
@@ -461,11 +565,10 @@ else:
     if len(sorted_v) > 0:
         for i, j in enumerate(sorted_v):
             pretty_roles(j[1])
-            if i == 2:
+            if i == 0:
                 break
     else:
         print "No possible roles"
-
 
     print "our lanes:"
     n = build_lanes(args.heroes, verbose=True)
@@ -475,10 +578,12 @@ else:
     if len(sorted_n) > 0:
         for i, j in enumerate(sorted_n):
             pretty_lanes(j[1])
-            if i == 6:
+            if i == 0:
                 break
     else:
         print "No possible lanes"
+
+    
 
 
 
